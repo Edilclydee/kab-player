@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "kab-player",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./site",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    // /__scheduled only matters for `wrangler dev --test-scheduled`; in production it just serves the app.
+    "run_worker_first": ["/api/*", "/__scheduled"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "kab-player",
+      "database_id": "261a73e5-88a1-4f94-b4a7-43e01c62541a"
+    }
+  ],
+  // Weekly check for new shows: Saturdays 12:00 UTC (Sat 4-5am in LA).
+  "triggers": { "crons": ["0 12 * * SAT"] },
+  "routes": [{ "pattern": "kab.edilcly.de", "custom_domain": true }],
+  "observability": { "enabled": true }
+}

@@ -1,0 +1,9 @@
+node_modules/
+.wrangler/
+.dev.vars
+build/
+data-raw/
+
+# Show logos and photos belong to their owners; kept locally, not published.
+site/logo.png
+site/logos/
