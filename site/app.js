@@ -784,7 +784,7 @@ function renderPlayer() {
   }
   $('.pb-art', bar).innerHTML = artHTML(ep);
   $('.pb-title', bar).textContent = itemTitle(ep);
-  $('.pb-sub', bar).textContent = sub;
+  $('.pb-meta', bar).textContent = sub;
   const playing = !audio.paused;
   for (const b of $$('[data-act="toggle"]')) {
     b.innerHTML = playing ? ICON.pause : ICON.play;
@@ -827,6 +827,7 @@ function renderProgress() {
   if (!seeking) $('.np-seek').value = d ? Math.round((t / d) * 1000) : 0;
   $('.t-cur').textContent = fmtClock(t);
   $('.t-left').textContent = d ? '-' + fmtClock(d - t) : '--:--';
+  $('.pb-time').textContent = d ? `${fmtClock(t)} / ${fmtClock(d)}` : fmtClock(t);
 }
 
 // ---------- views ----------
