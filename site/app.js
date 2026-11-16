@@ -1194,6 +1194,20 @@ function openMenu(title, sub, items) {
   };
 }
 
+// Forget the resume point so it drops off Continue listening (synced to other devices).
+function removeFromContinue(id) {
+  if (id === S.current) {
+    // Rewind first, so the pause handler's savePosition() doesn't write the old position back.
+    seekTo(0);
+    audio.pause();
+  }
+  setProgress(id, { pos: 0, done: 0 });
+  saveLocal();
+  push();
+  refreshView();
+  toast('Removed from Continue listening');
+}
+
 function episodeMenu(id) {
   const ep = itemOf(id);
   if (!ep) return;
@@ -1201,6 +1215,7 @@ function episodeMenu(id) {
   const p = S.prog[id];
   const items = [];
   if (p && p.pos > 0 && !p.done) items.push({ label: `Resume at ${fmtClock(p.pos)}`, run: () => loadEpisode(id) });
+  if (p && p.pos > 10 && !p.done) items.push({ label: 'Remove from Continue listening', run: () => removeFromContinue(id) });
   items.push({ label: 'Play from the beginning', run: () => { setProgress(id, { pos: 0, done: 0 }); loadEpisode(id, { fromStart: true }); } });
   items.push({ label: isFav(id) ? 'Remove from favorites' : 'Add to favorites', run: () => toggleFav(id) });
   if (p?.done) items.push({ label: 'Mark as unplayed', run: () => { setProgress(id, { pos: 0, done: 0 }); push(); refreshView(); } });
