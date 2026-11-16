@@ -22,6 +22,7 @@ const ICON = {
   volHigh: '<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg>',
   volLow: '<svg viewBox="0 0 24 24"><path d="M5 9v6h4l5 5V4L9 9H5zm13.5 3A4.5 4.5 0 0 0 16 8v8a4.5 4.5 0 0 0 2.5-4z"/></svg>',
   volOff: '<svg viewBox="0 0 24 24"><path d="M16.5 12A4.5 4.5 0 0 0 14 8v2.2l2.45 2.45c.03-.2.05-.41.05-.65zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.8 8.8 0 0 0 21 12a9 9 0 0 0-7-8.77v2.06A7 7 0 0 1 19 12zM4.27 3 3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a9 9 0 0 0 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4 9.91 6.09 12 8.18V4z"/></svg>',
+  close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
   wave: '<svg viewBox="0 0 24 24"><path d="M3 10h2v4H3zm4-4h2v12H7zm4-3h2v18h-2zm4 5h2v8h-2zm4 3h2v2h-2z"/></svg>',
   folder: '<svg viewBox="0 0 24 24"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg>',
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>',
@@ -69,12 +70,20 @@ function ago(ms) {
 }
 
 let toastTimer;
-function toast(msg) {
+function toast(msg, action) {
   const el = $('#toast');
   el.textContent = msg;
+  el.classList.toggle('has-action', !!action);
+  if (action) {
+    const b = document.createElement('button');
+    b.className = 'toast-action';
+    b.textContent = action.label;
+    b.onclick = () => { el.classList.remove('show'); clearTimeout(toastTimer); action.run(); };
+    el.append(b);
+  }
   el.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
+  toastTimer = setTimeout(() => el.classList.remove('show'), action ? 5000 : 2600);
 }
 
 // ---------- state ----------
@@ -724,6 +733,7 @@ const itemRowHTML = (it, opts = {}) => (isClip(it) ? clipRowHTML(it, { withFolde
 // Re-render rows in place (cheap) when play state or progress changes.
 function refreshRows() {
   for (const li of $$('.ep[data-id]')) {
+    if (li.classList.contains('swiping')) continue; // mid-swipe: don't yank the row out from under the finger
     const it = itemOf(li.dataset.id);
     if (!it) continue;
     const tmp = document.createElement('template');
@@ -895,7 +905,7 @@ function renderHome() {
 
   view().innerHTML = `
     ${cont.length ? `<section class="section"><h2>Continue listening</h2>
-      <ul class="eps" data-with-year data-with-era>${cont.map((e) => itemRowHTML(e, { withYear: true, withEra: true })).join('')}</ul></section>` : ''}
+      <ul class="eps" data-swipe data-with-year data-with-era>${cont.map((e) => itemRowHTML(e, { withYear: true, withEra: true })).join('')}</ul></section>` : ''}
     ${favs.length ? `<section class="section"><h2>Favorites
         ${favs.length > 5 ? `<a class="section-link" href="#/favorites">See all ${favs.length}</a>` : ''}</h2>
       <ul class="eps" data-with-year data-with-era>${favs.slice(0, 5).map(({ ep }) => itemRowHTML(ep, { withYear: true, withEra: true })).join('')}</ul></section>` : ''}
@@ -1182,9 +1192,9 @@ function renderSetup(message = '') {
 // ---------- menus ----------
 function openMenu(title, sub, items) {
   const m = $('#menu');
-  $('.menu-panel', m).innerHTML = `<div class="menu-title">${esc(title)}${sub ? `<small>${esc(sub)}</small>` : ''}</div>` +
-    items.map((it, i) => `<button data-menu="${i}">${esc(it.label)}</button>`).join('') +
-    '<button data-menu="close">Cancel</button>';
+  $('.menu-panel', m).innerHTML = `<div class="menu-head"><div class="menu-title">${esc(title)}${sub ? `<small>${esc(sub)}</small>` : ''}</div>
+      <button class="menu-close" data-menu="close" aria-label="Close">${ICON.close}</button></div>` +
+    items.map((it, i) => `<button data-menu="${i}">${esc(it.label)}</button>`).join('');
   m.hidden = false;
   m.onclick = (e) => {
     const b = e.target.closest('[data-menu]');
@@ -1196,6 +1206,7 @@ function openMenu(title, sub, items) {
 
 // Forget the resume point so it drops off Continue listening (synced to other devices).
 function removeFromContinue(id) {
+  const prev = S.prog[id] ? { ...S.prog[id] } : null;
   if (id === S.current) {
     // Rewind first, so the pause handler's savePosition() doesn't write the old position back.
     seekTo(0);
@@ -1205,8 +1216,68 @@ function removeFromContinue(id) {
   saveLocal();
   push();
   refreshView();
-  toast('Removed from Continue listening');
+  toast('Removed from Continue listening', prev && {
+    label: 'Undo',
+    run: () => {
+      setProgress(id, { pos: prev.pos, dur: prev.dur, done: prev.done });
+      if (id === S.current) seekTo(prev.pos);
+      saveLocal();
+      push();
+      refreshView();
+    },
+  });
 }
+
+// ---------- swipe left to remove (Continue listening, touch only) ----------
+let sw = null;
+let swipedAt = 0;
+document.addEventListener('touchstart', (e) => {
+  const li = e.touches.length === 1 && e.target.closest('[data-swipe] .ep[data-id]');
+  if (!li || li.classList.contains('swiping')) { sw = null; return; }
+  const t = e.touches[0];
+  sw = { li, x: t.clientX, y: t.clientY, t: Date.now(), dx: 0, active: false, dead: false };
+}, { passive: true });
+document.addEventListener('touchmove', (e) => {
+  if (!sw || sw.dead) return;
+  const t = e.touches[0];
+  const dx = t.clientX - sw.x;
+  const dy = t.clientY - sw.y;
+  if (!sw.active) {
+    if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+    // Mostly vertical = scrolling; rightward = not ours. Either way, leave it alone.
+    if (Math.abs(dy) >= Math.abs(dx) || dx > 0) { sw.dead = true; return; }
+    sw.active = true;
+    sw.li.classList.add('swiping');
+  }
+  e.preventDefault();
+  sw.dx = Math.min(0, dx);
+  sw.li.style.setProperty('--dx', sw.dx + 'px');
+}, { passive: false });
+function endSwipe() {
+  if (!sw) return;
+  const { li, dx, active, t } = sw;
+  sw = null;
+  if (!active) return;
+  swipedAt = Date.now();
+  const w = li.offsetWidth;
+  const fling = dx < -50 && Date.now() - t < 250;
+  li.classList.add('settling');
+  if (dx < -Math.min(120, w * 0.35) || fling) {
+    li.style.setProperty('--dx', -w + 'px');
+    li.style.height = li.offsetHeight + 'px';
+    setTimeout(() => { li.classList.add('collapsing'); li.style.height = '0px'; }, 180);
+    setTimeout(() => removeFromContinue(li.dataset.id), 400);
+  } else {
+    li.style.setProperty('--dx', '0px');
+    setTimeout(() => li.classList.remove('swiping', 'settling'), 200);
+  }
+}
+document.addEventListener('touchend', endSwipe);
+document.addEventListener('touchcancel', endSwipe);
+// A swipe shouldn't also count as a tap on the row.
+document.addEventListener('click', (e) => {
+  if (Date.now() - swipedAt < 400 && e.target.closest('.ep')) { e.stopPropagation(); e.preventDefault(); }
+}, true);
 
 function episodeMenu(id) {
   const ep = itemOf(id);
@@ -1216,22 +1287,14 @@ function episodeMenu(id) {
   const items = [];
   if (p && p.pos > 0 && !p.done) items.push({ label: `Resume at ${fmtClock(p.pos)}`, run: () => loadEpisode(id) });
   if (p && p.pos > 10 && !p.done) items.push({ label: 'Remove from Continue listening', run: () => removeFromContinue(id) });
-  items.push({ label: 'Play from the beginning', run: () => { setProgress(id, { pos: 0, done: 0 }); loadEpisode(id, { fromStart: true }); } });
   items.push({ label: isFav(id) ? 'Remove from favorites' : 'Add to favorites', run: () => toggleFav(id) });
-  if (p?.done) items.push({ label: 'Mark as unplayed', run: () => { setProgress(id, { pos: 0, done: 0 }); push(); refreshView(); } });
-  else items.push({ label: 'Mark as played', run: () => { setProgress(id, { pos: p?.dur || p?.pos || 0, done: 1 }); push(); refreshView(); } });
   if (clip) {
     const f = C.folders[ep.fi];
     if (location.hash !== folderHash(f)) items.push({ label: `Open folder: ${f.title}`, run: () => { location.hash = folderHash(f); } });
     const show = ep.date && S.epByDate?.get(ep.date);
     if (show) items.push({ label: `Play the full show from ${clipDate(ep.date)}`, run: () => loadEpisode(show.id) });
-    if (ep.date) items.push({ label: 'More clips from this day', run: () => { location.hash = `#/clips/day/${ep.date}`; } });
     openMenu(ep.title, [folderLabel(ep.fi), ep.date && clipDate(ep.date)].filter(Boolean).join(' · '), items);
     return;
-  }
-  items.push({ label: 'Clips from this day', run: () => { location.hash = `#/clips/day/${ep.date}`; } });
-  if (!location.hash.startsWith(`#/year/${ep.date.slice(0, 4)}`)) {
-    items.push({ label: `Show all of ${ep.date.slice(0, 4)}`, run: () => { location.hash = `#/year/${ep.date.slice(0, 4)}/${id}`; } });
   }
   openMenu(longDate(ep.date), [ep.era, ep.label, ep.note].filter(Boolean).join(' · '), items);
 }
